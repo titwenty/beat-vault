@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  bpm INTEGER,
+  target_bpm INTEGER,
+  key TEXT,
+  note TEXT,
+  audio_key TEXT NOT NULL,
+  flp_key TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

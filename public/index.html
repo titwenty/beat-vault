@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BEAT VAULT</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#090a0d;color:#f5f7fb;font-family:Arial,sans-serif}
+.wrap{max-width:1050px;margin:auto;padding:35px 20px 70px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.brand{font-size:26px;font-weight:900;letter-spacing:.08em}.sub,.meta,.msg{color:#8f96a3;font-size:13px}
+.grid{display:grid;gap:12px}.project,.panel{background:#111318;border:1px solid #272b34;border-radius:16px;padding:16px}
+.project{display:grid;grid-template-columns:1fr auto;gap:15px;align-items:center}.name{font-weight:800}.meta{margin-top:6px}
+button{border:0;border-radius:10px;padding:10px 14px;background:#fff;color:#08090b;font-weight:800;cursor:pointer}
+.secondary,.tempo button{background:#1b1e25;color:#fff;border:1px solid #272b34}.actions{display:flex;gap:8px}.play{width:42px;height:42px;border-radius:50%;padding:0}
+.panel{margin-top:20px}.hidden{display:none}.empty{text-align:center;color:#8f96a3;padding:35px;border:1px dashed #272b34;border-radius:16px}
+input{width:100%;background:#0b0d11;border:1px solid #272b34;color:#fff;border-radius:10px;padding:11px;margin:5px 0 10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{font-size:12px;color:#8f96a3}audio{width:100%;margin-top:16px}.tempo{display:flex;gap:7px;margin-top:12px}.tempo button.active{background:#fff;color:#000}
+@media(max-width:650px){.row{grid-template-columns:1fr}.project{grid-template-columns:1fr}}
+</style></head>
+<body>
+<div class="wrap">
+<div class="top"><div><div class="brand">BEAT VAULT</div><div class="sub">Private projects for artist</div></div><button class="secondary" id="adminBtn">ADMIN</button></div>
+<section id="projects" class="grid"><div class="empty">Загрузка...</div></section>
+
+<section id="viewer" class="panel hidden">
+<h2 id="vname"></h2><div id="vmeta" class="meta"></div>
+<audio id="audio" controls preload="none"></audio><div class="tempo" id="tempo"></div>
+<div id="flp"></div><div class="msg" id="vmsg"></div>
+</section>
+
+<section id="admin" class="panel hidden">
+<h2>Добавить проект</h2>
+<input id="apass" type="password" placeholder="Admin password">
+<div class="row">
+<div><label>Название</label><input id="aname" placeholder="Project 59"></div>
+<div><label>Код</label><input id="acode" placeholder="9999"></div>
+<div><label>Original BPM</label><input id="abpm" type="number" placeholder="145"></div>
+<div><label>Target BPM</label><input id="atarget" type="number" placeholder="90"></div>
+<div><label>Key</label><input id="akey" placeholder="F# minor"></div>
+<div><label>Note</label><input id="anote" placeholder="Комментарий"></div>
+</div>
+<label>Audio</label><input id="audioFile" type="file" accept="audio/*">
+<label>FL Studio project (optional)</label><input id="flpFile" type="file" accept=".flp">
+<button id="upload">UPLOAD PROJECT</button><div id="amsg" class="msg"></div>
+</section>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+async function load(){
+ const r=await fetch('/api/projects'),d=await r.json(),box=$('#projects');box.innerHTML='';
+ if(!d.projects?.length){box.innerHTML='<div class="empty">Пока нет проектов.</div>';return}
+ for(const p of d.projects){
+  const e=document.createElement('div');e.className='project';
+  e.innerHTML='<div><div class="name">'+esc(p.name)+'</div><div class="meta">'+(p.bpm||'?')+' BPM'+(p.target_bpm?' → '+p.target_bpm+' BPM':'')+(p.key?' · '+esc(p.key):'')+'</div></div><div class="actions"><button class="play">▶</button><button class="secondary">OPEN</button></div>';
+  e.querySelectorAll('button').forEach(b=>b.onclick=()=>unlock(p));box.appendChild(e);
+ }
+}
+async function unlock(p){
+ const code=prompt('Код проекта:');if(code===null)return;
+ const r=await fetch('/api/project/'+p.id+'/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code})});
+ const d=await r.json();if(!r.ok){alert(d.error||'Неверный код');return}
+ $('#viewer').classList.remove('hidden');$('#vname').textContent=d.project.name;
+ $('#vmeta').textContent=(d.project.bpm||'?')+' BPM'+(d.project.target_bpm?' → '+d.project.target_bpm+' BPM':'')+(d.project.key?' · '+d.project.key:'');
+ const a=$('#audio');a.src=d.audio_url;a.playbackRate=1;a.load();
+ $('#tempo').innerHTML='';
+ [['1x',1],['0.75x',.75],['0.5x',.5]].forEach(([t,v],i)=>{
+  const b=document.createElement('button');b.textContent=t;if(i===0)b.classList.add('active');
+  b.onclick=()=>{[...$('#tempo').children].forEach(x=>x.classList.remove('active'));b.classList.add('active');a.playbackRate=v};
+  $('#tempo').appendChild(b);
+ });
+ $('#flp').innerHTML=d.flp_url?'<p><a style="color:#fff" href="'+d.flp_url+'">Download FL Studio project</a></p>':'';
+ $('#viewer').scrollIntoView({behavior:'smooth'});
+}
+$('#adminBtn').onclick=()=>$('#admin').classList.toggle('hidden');
+$('#upload').onclick=async()=>{
+ const pass=$('#apass').value,f=$('#audioFile').files[0];if(!f){$('#amsg').textContent='Выбери audio.';return}
+ const fd=new FormData();
+ [['aname','name'],['acode','code'],['abpm','bpm'],['atarget','target_bpm'],['akey','key'],['anote','note']].forEach(([a,b])=>fd.append(b,$('#'+a).value));
+ fd.append('audio',f);if($('#flpFile').files[0])fd.append('flp',$('#flpFile').files[0]);
+ $('#amsg').textContent='Загрузка...';
+ const r=await fetch('/api/upload',{method:'POST',headers:{'X-Admin-Password':pass},body:fd}),d=await r.json();
+ $('#amsg').textContent=r.ok?'Готово!':(d.error||'Ошибка');if(r.ok)load();
+};
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+load();
+</script>
+</body></html>
